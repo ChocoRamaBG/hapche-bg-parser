@@ -1,0 +1,31 @@
+name: Run Scraper 🚀
+
+on:
+  workflow_dispatch:  # Позволява ти да го пускаш ръчно с бутонче
+
+jobs:
+  scrape-job:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Install dependencies
+        run: |
+          pip install webdriver-manager pandas selenium openpyxl
+
+      - name: Run Scraper Script
+        run: python main.py
+
+      - name: Upload Excel Artifact
+        uses: actions/upload-artifact@v4
+        if: always()  # Дори да гръмне скрипта, качи каквото си събрал
+        with:
+          name: Hapche-Data-Export
+          path: scraped_data/*.xlsx
