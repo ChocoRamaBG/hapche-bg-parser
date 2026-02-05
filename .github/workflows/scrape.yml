@@ -1,11 +1,17 @@
 name: Run Scraper 🚀
 
 on:
-  workflow_dispatch:  # Позволява ти да го пускаш ръчно с бутонче
+  workflow_dispatch: # Ръчно пускане
+  # schedule:       # Ако искаш да се пуска сам на всеки 6 часа
+  #   - cron: '0 */6 * * *' 
 
 jobs:
   scrape-job:
     runs-on: ubuntu-latest
+    
+    # ⚠️ ВАЖНО: Даваме права на скрипта да пише в репото!
+    permissions:
+      contents: write
     
     steps:
       - name: Checkout repo
@@ -20,12 +26,22 @@ jobs:
         run: |
           pip install webdriver-manager pandas selenium openpyxl
 
-      - name: Run Scraper Script
+      - name: Run Scraper Script (Grind Mode)
         run: python main.py
 
+      # 💾 КАЧВАМЕ EXCEL-A КАТО ARTIFACT
+      # Всеки път ще имаш нов файл (Part 1, Part 2...), после си ги събери.
       - name: Upload Excel Artifact
         uses: actions/upload-artifact@v4
-        if: always()  # Дори да гръмне скрипта, качи каквото си събрал
+        if: always()
         with:
-          name: Hapche-Data-Export
+          name: Hapche-Data-Part-${{ github.run_id }}
           path: scraped_data/*.xlsx
+
+      # 🧠 ЗАПАЗВАМЕ ПРОГРЕСА В РЕПОТО (COMMIT BACK)
+      # Това ще update-не файла last_page.txt в самото GitHub репо.
+      - name: Commit Progress (Auto-Save)
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "🤖 Save Game: Updated scraper progress [skip ci]"
+          file_pattern: "last_page.txt"
