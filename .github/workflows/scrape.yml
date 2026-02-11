@@ -1,8 +1,8 @@
 name: Run Scraper 🚀
 
 on:
-  workflow_dispatch: # Ръчно пускане
-  # schedule:       # Ако искаш да се пуска сам на всеки 6 часа
+  workflow_dispatch: # Ръчно пускане за истински hustlers
+  # schedule:        # Ако искаш да се пуска сам
   #   - cron: '0 */6 * * *' 
 
 jobs:
@@ -15,12 +15,12 @@ jobs:
     
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
-          python-version: '3.9'
+          python-version: '3.10' # 3.9 is so 2020
 
       - name: Install dependencies
         run: |
@@ -29,17 +29,15 @@ jobs:
       - name: Run Scraper Script (Grind Mode)
         run: python main.py
 
-      # 💾 КАЧВАМЕ EXCEL-A КАТО ARTIFACT
-      # Всеки път ще имаш нов файл (Part 1, Part 2...), после си ги събери.
-      - name: Upload Excel Artifact
+      # 💾 КАЧВАМЕ ДАННИТЕ
+      - name: Upload Data Artifact
         uses: actions/upload-artifact@v4
         if: always()
         with:
           name: Hapche-Data-Part-${{ github.run_id }}
-          path: scraped_data/*.xlsx
+          path: scraped_data/
 
       # 🧠 ЗАПАЗВАМЕ ПРОГРЕСА В РЕПОТО (COMMIT BACK)
-      # Това ще update-не файла last_page.txt в самото GitHub репо.
       - name: Commit Progress (Auto-Save)
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
