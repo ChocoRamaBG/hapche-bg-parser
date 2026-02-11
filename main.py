@@ -55,45 +55,54 @@ if not os.path.exists(current_batch_filename):
     except Exception as e:
         print(f"❌ Error creating CSV: {e}")
 
-# --- ⚙️ НАСТРОЙКИ НА БРАУЗЪРА ---
+# --- ⚙️ НАСТРОЙКИ НА БРАУЗЪРА (GITHUB ACTIONS MODE) ---
 options = Options()
-# options.add_argument('--headless=new') # Пусни headless само ако си сигурен, че работи
-options.add_argument('--no-sandbox')
-options.add_argument('--disable-dev-shm-usage')
+
+# 🛑 ВАЖНО ЗА GITHUB ACTIONS:
+options.add_argument('--headless=new')  # <-- ТОВА Е ЗАДЪЛЖИТЕЛНО ТАМ!
+options.add_argument('--no-sandbox')    # <-- ТОВА СЪЩО!
+options.add_argument('--disable-dev-shm-usage') # <-- ТОВА СПАСЯВА ПАМЕТТА!
+options.add_argument('--disable-gpu')   # <-- За всеки случай
 options.add_argument('--window-size=1920,1080')
 options.add_argument('--disable-blink-features=AutomationControlled')
 options.add_argument('--log-level=3')
 options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
 
-print("⏳ Summoning Chrome Demon...")
-service = Service(ChromeDriverManager().install())
-driver = webdriver.Chrome(service=service, options=options)
+print("⏳ Summoning Chrome Demon (Headless Mode)...")
+try:
+    service = Service(ChromeDriverManager().install())
+    driver = webdriver.Chrome(service=service, options=options)
+    print("✅ Драйвърът захапа! Vamos!")
+except Exception as e:
+    print(f"💥 FATAL ERROR при стартиране на Chrome: {e}")
+    # Ако гръмне тук, няма смисъл да продължаваме, затова exit
+    exit(1)
 
 # --- 🍪 COOKIE MONSTER SLAYER ---
 def nuke_cookie_popups(driver):
     """
     Търси и унищожава бисквитчовци и GDPR глупости.
     """
-    # 1. Google Funding Choices (Попапът с 'fc-dialog')
+    # 1. Google Funding Choices
     try:
-        # Чакаме малко, щото тия гадове се появяват със закъснение
         accept_btn = WebDriverWait(driver, 3).until(
             EC.element_to_be_clickable((By.CSS_SELECTOR, "button.fc-cta-consent"))
         )
-        accept_btn.click()
-        print("🍪 Google Cookie Popup: DELETED.")
+        # Използваме JavaScript click, защото понякога елементът е закрит
+        driver.execute_script("arguments[0].click();", accept_btn)
+        print("🍪 Google Cookie Popup: DELETED via JS.")
     except TimeoutException:
-        pass # Няма го, супер
+        pass 
     except Exception as e:
-        pass # Нещо стана, малини и къпини, все тая
+        pass 
 
-    # 2. TermsFeed Popup (Попапът с 'cc-nb-okagree')
+    # 2. TermsFeed Popup
     try:
         accept_btn = WebDriverWait(driver, 2).until(
             EC.element_to_be_clickable((By.CSS_SELECTOR, "button.cc-nb-okagree"))
         )
-        accept_btn.click()
-        print("🍪 TermsFeed Popup: OBLITERATED.")
+        driver.execute_script("arguments[0].click();", accept_btn)
+        print("🍪 TermsFeed Popup: OBLITERATED via JS.")
     except TimeoutException:
         pass
     except Exception as e:
@@ -116,7 +125,7 @@ def scrape_details_from_profile(url, basic_info):
     try:
         driver.get(url)
         
-        # 💣 ТУК Е КЛЮЧЪТ! Убиваме бисквитките веднага след влизане!
+        # 💣 Убиваме бисквитките
         nuke_cookie_popups(driver)
         
         # Чакаме body-то
@@ -150,7 +159,6 @@ def scrape_details_from_profile(url, basic_info):
         phones = []
         try:
             phone_container = driver.find_element(By.XPATH, "//div[contains(@class, 'label') and contains(text(), 'Телефон')]/following-sibling::div[contains(@class, 'value')]")
-            # Проверка дали е просто текст или списък
             phone_divs = phone_container.find_elements(By.TAG_NAME, "div")
             if phone_divs:
                 phones = [p.text.strip() for p in phone_divs if p.text.strip()]
@@ -205,7 +213,7 @@ try:
         try:
             driver.get(target_url)
             
-            # Махаме бисквитките и тук, за всеки случай
+            # Махаме бисквитките
             nuke_cookie_popups(driver)
 
             try:
