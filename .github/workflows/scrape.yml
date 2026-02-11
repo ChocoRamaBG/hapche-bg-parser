@@ -20,16 +20,19 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.10' # 3.9 is so 2020
+          python-version: '3.10'
 
       - name: Install dependencies
         run: |
           pip install webdriver-manager pandas selenium openpyxl
 
+      # ТУК Е МАГИЯТА: Скриптът върти, върти и трупа данни в папката
       - name: Run Scraper Script (Grind Mode)
+        id: scraper
         run: python main.py
+        continue-on-error: true # Дори да гръмне Python-а, продължаваме към записа!
 
-      # 💾 КАЧВАМЕ ДАННИТЕ
+      # 💾 КАЧВАМЕ ДАННИТЕ КАТО ARTIFACT (За всеки случай)
       - name: Upload Data Artifact
         uses: actions/upload-artifact@v4
         if: always()
@@ -37,9 +40,12 @@ jobs:
           name: Hapche-Data-Part-${{ github.run_id }}
           path: scraped_data/
 
-      # 🧠 ЗАПАЗВАМЕ ПРОГРЕСА В РЕПОТО (COMMIT BACK)
-      - name: Commit Progress (Auto-Save)
+      # 🧠 ЗАПАЗВАМЕ ПРОГРЕСА И CSV-ТО ДИРЕКТНО В РЕПОТО
+      - name: Commit Loot (Auto-Save Data & Progress)
         uses: stefanzweifel/git-auto-commit-action@v5
+        if: always() # <-- ТОВА Е КЛЮЧЪТ! Изпълнява се винаги, дори при грешка горе.
         with:
-          commit_message: "🤖 Save Game: Updated scraper progress [skip ci]"
-          file_pattern: "last_page.txt"
+          commit_message: "🤖 Loot Secure: Saved data & progress from Page ${{ steps.scraper.outcome }}"
+          # Тук казваме на Git да гледа и TXT файла, и CSV файловете
+          file_pattern: "last_page.txt scraped_data/*.csv" 
+          skip_dirty_check: false
