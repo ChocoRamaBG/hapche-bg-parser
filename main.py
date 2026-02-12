@@ -1,5 +1,6 @@
 import time
 import os
+import sys  # <--- ТРЯБВА НИ ЗА EXIT CODES
 import pandas as pd
 import csv
 from datetime import datetime
@@ -14,7 +15,8 @@ from selenium.common.exceptions import TimeoutException
 
 # --- ⚙️ КОНФИГУРАЦИЯ & BRAINROT ---
 START_TIME = time.time()
-TIME_LIMIT_SECONDS = 5.5 * 60 * 60  # 5 часа и 30 минути grind
+# Намаляме малко времето, за да сме сигурни, че има време за commit
+TIME_LIMIT_SECONDS = 5.4 * 60 * 60  # Оставяме малко buffer time, да не гръмне runner-а
 
 output_dir = "scraped_data"
 state_file = "last_page.txt" 
@@ -55,14 +57,12 @@ if not os.path.exists(current_batch_filename):
     except Exception as e:
         print(f"❌ Error creating CSV: {e}")
 
-# --- ⚙️ НАСТРОЙКИ НА БРАУЗЪРА (GITHUB ACTIONS MODE) ---
+# --- ⚙️ НАСТРОЙКИ НА БРАУЗЪРА ---
 options = Options()
-
-# 🛑 ВАЖНО ЗА GITHUB ACTIONS:
-options.add_argument('--headless=new')  # <-- ТОВА Е ЗАДЪЛЖИТЕЛНО ТАМ!
-options.add_argument('--no-sandbox')    # <-- ТОВА СЪЩО!
-options.add_argument('--disable-dev-shm-usage') # <-- ТОВА СПАСЯВА ПАМЕТТА!
-options.add_argument('--disable-gpu')   # <-- За всеки случай
+options.add_argument('--headless=new') 
+options.add_argument('--no-sandbox')    
+options.add_argument('--disable-dev-shm-usage') 
+options.add_argument('--disable-gpu')   
 options.add_argument('--window-size=1920,1080')
 options.add_argument('--disable-blink-features=AutomationControlled')
 options.add_argument('--log-level=3')
@@ -72,41 +72,26 @@ print("⏳ Summoning Chrome Demon (Headless Mode)...")
 try:
     service = Service(ChromeDriverManager().install())
     driver = webdriver.Chrome(service=service, options=options)
-    print("✅ Драйвърът захапа! Vamos!")
+    print("✅ Драйвърът захапа! Vamos a la playa!")
 except Exception as e:
     print(f"💥 FATAL ERROR при стартиране на Chrome: {e}")
-    # Ако гръмне тук, няма смисъл да продължаваме, затова exit
-    exit(1)
+    sys.exit(1) # Exit with error
 
 # --- 🍪 COOKIE MONSTER SLAYER ---
 def nuke_cookie_popups(driver):
-    """
-    Търси и унищожава бисквитчовци и GDPR глупости.
-    """
-    # 1. Google Funding Choices
+    # Търси и унищожава досадните бисквитчовци
     try:
         accept_btn = WebDriverWait(driver, 3).until(
             EC.element_to_be_clickable((By.CSS_SELECTOR, "button.fc-cta-consent"))
         )
-        # Използваме JavaScript click, защото понякога елементът е закрит
         driver.execute_script("arguments[0].click();", accept_btn)
-        print("🍪 Google Cookie Popup: DELETED via JS.")
-    except TimeoutException:
-        pass 
-    except Exception as e:
-        pass 
-
-    # 2. TermsFeed Popup
+    except: pass 
     try:
         accept_btn = WebDriverWait(driver, 2).until(
             EC.element_to_be_clickable((By.CSS_SELECTOR, "button.cc-nb-okagree"))
         )
         driver.execute_script("arguments[0].click();", accept_btn)
-        print("🍪 TermsFeed Popup: OBLITERATED via JS.")
-    except TimeoutException:
-        pass
-    except Exception as e:
-        pass
+    except: pass
 
 # --- 💾 ЗАПИСВАЧКАТА ---
 def save_single_record(record):
@@ -124,23 +109,17 @@ def scrape_details_from_profile(url, basic_info):
     print(f"    👉 Visiting: {url}")
     try:
         driver.get(url)
-        
-        # 💣 Убиваме бисквитките
         nuke_cookie_popups(driver)
         
-        # Чакаме body-то
         try:
             WebDriverWait(driver, 5).until(EC.presence_of_element_located((By.TAG_NAME, "body")))
-        except:
-            print("⚠️ Page took too long or is broken.")
-
-        # --- HERO SECTION ---
-        try:
-            basic_info["Име"] = driver.find_element(By.XPATH, "//h1[@itemprop='name']").text.strip()
         except: pass
 
-        try:
-            basic_info["Специалност (Профил)"] = driver.find_element(By.CSS_SELECTOR, ".subtitle--category").text.strip()
+        # --- HERO SECTION ---
+        try: basic_info["Име"] = driver.find_element(By.XPATH, "//h1[@itemprop='name']").text.strip()
+        except: pass
+
+        try: basic_info["Специалност (Профил)"] = driver.find_element(By.CSS_SELECTOR, ".subtitle--category").text.strip()
         except: pass
 
         # --- STATISTICS ---
@@ -151,8 +130,7 @@ def scrape_details_from_profile(url, basic_info):
             "Коментари (Профил)": "comments-statistics-metadata-value"
         }
         for key, div_id in stats_map.items():
-            try:
-                basic_info[key] = driver.find_element(By.ID, div_id).text.strip()
+            try: basic_info[key] = driver.find_element(By.ID, div_id).text.strip()
             except: basic_info[key] = "-"
 
         # --- KONTAKTI ---
@@ -168,26 +146,21 @@ def scrape_details_from_profile(url, basic_info):
         basic_info["Телефони"] = ", ".join(phones) if phones else "-"
 
         # Adres
-        address_profile = "-"
         try:
-            address_profile = driver.find_element(By.ID, "address-value").text.strip().replace('\n', ', ')
+            basic_info["Адрес (Профил)"] = driver.find_element(By.ID, "address-value").text.strip().replace('\n', ', ')
         except:
             try:
-                address_profile = driver.find_element(By.XPATH, "//div[contains(@class, 'label') and contains(text(), 'Адрес')]/following-sibling::div[contains(@class, 'value')]").text.strip()
-            except: pass
-        basic_info["Адрес (Профил)"] = address_profile
+                basic_info["Адрес (Профил)"] = driver.find_element(By.XPATH, "//div[contains(@class, 'label') and contains(text(), 'Адрес')]/following-sibling::div[contains(@class, 'value')]").text.strip()
+            except: basic_info["Адрес (Профил)"] = "-"
 
-        # Rabotno vreme & Email
-        try:
-            basic_info["Работно време"] = driver.find_element(By.XPATH, "//div[contains(@class, 'label') and contains(text(), 'Работно време')]/following-sibling::div[contains(@class, 'value')]").text.strip()
+        # Info
+        try: basic_info["Работно време"] = driver.find_element(By.XPATH, "//div[contains(@class, 'label') and contains(text(), 'Работно време')]/following-sibling::div[contains(@class, 'value')]").text.strip()
         except: basic_info["Работно време"] = "-"
 
-        try:
-            basic_info["Email"] = driver.find_element(By.XPATH, "//div[contains(@class, 'label') and contains(text(), 'Електронна поща')]/following-sibling::div[contains(@class, 'value')]").text.strip()
+        try: basic_info["Email"] = driver.find_element(By.XPATH, "//div[contains(@class, 'label') and contains(text(), 'Електронна поща')]/following-sibling::div[contains(@class, 'value')]").text.strip()
         except: basic_info["Email"] = "-"
         
-        try:
-            basic_info["Website"] = driver.find_element(By.XPATH, "//div[contains(@class, 'label') and contains(text(), 'Интернет страница')]/following-sibling::div[contains(@class, 'value')]//a").get_attribute("href")
+        try: basic_info["Website"] = driver.find_element(By.XPATH, "//div[contains(@class, 'label') and contains(text(), 'Интернет страница')]/following-sibling::div[contains(@class, 'value')]//a").get_attribute("href")
         except: basic_info["Website"] = "-"
 
         basic_info["Timestamp"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -200,11 +173,15 @@ def scrape_details_from_profile(url, basic_info):
 # --- 📜 MAIN LOOP ---
 page = start_page
 print(f"🚀 Starting grind from page {page}.")
+exit_code = 0 # По подразбиране приемаме, че ще свършим нормално
 
 try:
     while True:
+        # 🛑 TIMEOUT CHECK
         if (time.time() - START_TIME) > TIME_LIMIT_SECONDS:
-            print("🛑 Time limit reached.")
+            print("🛑 Time limit reached. Suspending operation.")
+            print("Ще се видим в следващия run, копеле.")
+            exit_code = 2 # SPECIAL CODE: RESTART ME PLEASE
             break
 
         target_url = f"https://www.rating.hapche.bg/search/lekari-spetsialisti/-/-&page={page}"
@@ -212,22 +189,22 @@ try:
         
         try:
             driver.get(target_url)
-            
-            # Махаме бисквитките
             nuke_cookie_popups(driver)
 
             try:
                 WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.CSS_SELECTOR, "table.mr-table")))
             except:
                 print("⛔ No table found. End of the line.")
+                exit_code = 0 # Success finish
                 break
 
             rows = driver.find_elements(By.CSS_SELECTOR, "table.mr-table tbody tr")
             if not rows:
-                print("⛔ No doctors found.")
+                print("⛔ No doctors found. Looks like we are done.")
+                exit_code = 0
                 break
 
-            print(f"🔎 Found {len(rows)} potential victims (doctors).")
+            print(f"🔎 Found {len(rows)} potential victims (doctorchovci).")
             
             doctors_on_page = []
             for row in rows:
@@ -251,20 +228,23 @@ try:
                         })
                 except: continue
 
-            # Влизаме във всеки
+            # Scraping Loop
             for doc in doctors_on_page:
                 full_data = scrape_details_from_profile(doc['URL'], doc)
                 save_single_record(full_data)
 
+            # Mark page as done
             page += 1
             with open(state_file, "w") as f:
                 f.write(str(page))
 
         except Exception as e:
             print(f"🤬 Page error: {e}")
+            # Пробваме да минем напред, малини и къпини, все тая
             page += 1 
 
 finally:
     try: driver.quit()
     except: pass
-    print(f"\n🏁 Finished. Last page: {page}.")
+    print(f"\n🏁 Finished block. Last page: {page}. Exit Code: {exit_code}")
+    sys.exit(exit_code)
