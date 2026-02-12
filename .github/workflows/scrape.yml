@@ -1,18 +1,18 @@
-name: Run Scraper 🚀
+name: Infinite Scraper Grind 🚀
 
 on:
-  workflow_dispatch: # Ръчно пускане за истински hustlers
-  # schedule:        # Ако искаш да се пуска сам
-  #   - cron: '0 */6 * * *' 
+  workflow_dispatch:
+  # Можеш да го разкоментираш, ако искаш да тръгва сам
+  # schedule:
+  #   - cron: '0 0 * * *'
 
 jobs:
   scrape-job:
     runs-on: ubuntu-latest
-    
-    # ⚠️ ВАЖНО: Даваме права на скрипта да пише в репото!
     permissions:
       contents: write
-    
+      actions: write  # <--- ТОВА Е ВАЖНО, ЗА ДА МОЖЕ ДА СЕ РЕСТАРТИРА!
+
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
@@ -24,28 +24,31 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install webdriver-manager pandas selenium openpyxl
+          pip install webdriver-manager pandas selenium
 
-      # ТУК Е МАГИЯТА: Скриптът върти, върти и трупа данни в папката
-      - name: Run Scraper Script (Grind Mode)
+      # --- ПУСКАНЕ НА СКРИПТА ---
+      # Използваме "|| true" за да не спре workflow-а ако скриптът върне exit code 2 (Restart)
+      - name: Run Scraper Script
         id: scraper
-        run: python main.py
-        continue-on-error: true # Дори да гръмне Python-а, продължаваме към записа!
+        run: |
+          python main.py
+          echo "exit_code=$?" >> $GITHUB_OUTPUT
+        continue-on-error: true 
 
-      # 💾 КАЧВАМЕ ДАННИТЕ КАТО ARTIFACT (За всеки случай)
-      - name: Upload Data Artifact
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: Hapche-Data-Part-${{ github.run_id }}
-          path: scraped_data/
-
-      # 🧠 ЗАПАЗВАМЕ ПРОГРЕСА И CSV-ТО ДИРЕКТНО В РЕПОТО
-      - name: Commit Loot (Auto-Save Data & Progress)
+      # --- ЗАПАЗВАНЕ НА LOOT-А ---
+      - name: Commit Loot (Auto-Save)
         uses: stefanzweifel/git-auto-commit-action@v5
-        if: always() # <-- ТОВА Е КЛЮЧЪТ! Изпълнява се винаги, дори при грешка горе.
+        if: always() 
         with:
-          commit_message: "🤖 Loot Secure: Saved data & progress from Page ${{ steps.scraper.outcome }}"
-          # Тук казваме на Git да гледа и TXT файла, и CSV файловете
+          commit_message: "🤖 Save Progress: Page updated (Exit Code ${{ steps.scraper.outputs.exit_code }})"
           file_pattern: "last_page.txt scraped_data/*.csv" 
           skip_dirty_check: false
+
+      # --- RESPAWN LOGIC (THE INFINITE LOOP) ---
+      - name: Trigger Next Batch (Respawn)
+        if: steps.scraper.outputs.exit_code == '2'  # <--- Ако скриптът каже "2", рестартираме
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "🔄 Time limit hit. Respawning workflow for next batch..."
+          gh workflow run scrape.yml
